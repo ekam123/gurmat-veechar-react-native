@@ -63,11 +63,7 @@ export default function PlayerScreen() {
             {getFolderDisplayName(currentTrack.folderName)}
           </Text>
         </View>
-        <TouchableOpacity onPress={handleSpeedChange} style={styles.speedButton}>
-          <Text style={[styles.speedText, { color: theme.primary }]}>
-            {formatSpeed(playbackSpeed)}
-          </Text>
-        </TouchableOpacity>
+        <View style={styles.headerRight} />
       </View>
 
       {/* Artwork */}
@@ -86,6 +82,13 @@ export default function PlayerScreen() {
           {currentTrack.folderName}
         </Text>
       </View>
+
+      {/* Speed Button */}
+      <TouchableOpacity onPress={handleSpeedChange} style={styles.speedButton}>
+        <Text style={[styles.speedText, { color: theme.primary }]}>
+          {formatSpeed(playbackSpeed)}
+        </Text>
+      </TouchableOpacity>
 
       {/* Progress Slider */}
       <View style={styles.progressContainer}>
@@ -157,15 +160,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 2,
   },
-  speedButton: {
+  headerRight: {
     width: 44,
-    height: 44,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  speedText: {
-    fontSize: 14,
-    fontWeight: '600',
   },
   artworkContainer: {
     alignItems: 'center',
@@ -200,7 +196,7 @@ const styles = StyleSheet.create({
   },
   progressContainer: {
     paddingHorizontal: 24,
-    paddingTop: 32,
+    paddingTop: 8,
   },
   slider: {
     width: '100%',
@@ -220,8 +216,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  speedButton: {
+    alignSelf: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    marginTop: 16,
+  },
+  speedText: {
+    fontSize: 15,
+    fontWeight: '600',
+  },
   queueInfo: {
     alignItems: 'center',
+    marginTop: 16,
   },
   queueText: {
     fontSize: 13,

@@ -286,13 +286,13 @@ export async function saveCachedItems(items: Omit<CachedFolder, 'id'>[]): Promis
 }
 
 /**
- * Search cached folders by name
+ * Search cached folders by name (folders only, not individual audio tracks)
  */
 export async function searchCachedItems(query: string): Promise<CachedFolder[]> {
   const database = getDatabase();
   const searchPattern = `%${query}%`;
 
-  // Search in Core Data seed
+  // Search in Core Data seed - folders only
   const seedRows = await database.getAllAsync<{
     Z_PK: number;
     ZPARENTPATH: string;
@@ -304,7 +304,7 @@ export async function searchCachedItems(query: string): Promise<CachedFolder[]> 
   }>(
     `SELECT Z_PK, ZPARENTPATH, ZITEMNAME, ZITEMPATH, ZITEMTYPE, ZSORTORDER, ZLASTUPDATED
      FROM ZCACHEDFOLDERRECORD
-     WHERE ZITEMNAME LIKE ?
+     WHERE ZITEMNAME LIKE ? AND ZITEMTYPE = 'folder'
      ORDER BY ZITEMNAME ASC
      LIMIT 100`,
     [searchPattern]

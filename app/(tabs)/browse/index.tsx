@@ -106,11 +106,12 @@ export default function BrowseScreen() {
           <Ionicons name="search" size={18} color={theme.textSecondary} />
           <TextInput
             style={[styles.searchInput, { color: theme.text }]}
-            placeholder="Search tracks and folders..."
+            placeholder="Search folders..."
             placeholderTextColor={theme.textSecondary}
             value={searchQuery}
             onChangeText={handleSearch}
             returnKeyType="search"
+            autoCorrect={false}
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => handleSearch('')}>
