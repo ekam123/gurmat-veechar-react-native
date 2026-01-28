@@ -262,7 +262,7 @@ export default function FolderScreen() {
           text: 'Download',
           onPress: async () => {
             try {
-              await downloadTrack(item.itemPath, item.itemName);
+              await downloadTrack(item.itemPath, item.itemName, decodedPath, folderName);
               // Refresh to show updated download status
               loadData(false);
             } catch (error) {
@@ -322,6 +322,8 @@ export default function FolderScreen() {
             lastPlayedDate: null,
             downloadDate: null,
             isCompleted: completed,
+            folderPath: null,
+            folderName: null,
           });
         }
         return newMap;

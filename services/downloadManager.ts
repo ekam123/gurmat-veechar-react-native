@@ -34,7 +34,12 @@ function getLocalFilePath(trackUrl: string): string {
 /**
  * Download a track
  */
-export async function downloadTrack(trackUrl: string, trackName: string): Promise<void> {
+export async function downloadTrack(
+  trackUrl: string,
+  trackName: string,
+  folderPath?: string,
+  folderName?: string
+): Promise<void> {
   const store = useDownloadStore.getState();
 
   // Check if already downloading
@@ -83,6 +88,8 @@ export async function downloadTrack(trackUrl: string, trackName: string): Promis
         localFilePath: localPath,
         trackSizeBytes: sizeBytes,
         downloadDate: Date.now(),
+        folderPath: folderPath ?? null,
+        folderName: folderName ?? null,
       });
 
       await database.markTrackDownloaded(trackUrl, localPath, sizeBytes);

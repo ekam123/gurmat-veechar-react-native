@@ -57,6 +57,11 @@ export async function playTrack(track: QueueItem): Promise<void> {
       await player.seekTo(savedTrack.currentPlaybackTime);
     }
 
+    // Apply stored playback speed
+    if (store.playbackSpeed !== 1) {
+      player.setPlaybackRate(store.playbackSpeed, 'high');
+    }
+
     // Start playback
     player.play();
 
@@ -354,4 +359,35 @@ export async function stop(): Promise<void> {
  */
 export function getPlayer(): AudioPlayer | null {
   return player;
+}
+
+/**
+ * Available playback speed options
+ */
+export const PLAYBACK_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+
+/**
+ * Set playback speed
+ */
+export function setPlaybackSpeed(speed: number): void {
+  const store = useAudioStore.getState();
+  store.setPlaybackSpeed(speed);
+
+  if (player) {
+    player.setPlaybackRate(speed, 'high');
+  }
+}
+
+/**
+ * Cycle to next playback speed
+ */
+export function cyclePlaybackSpeed(): number {
+  const store = useAudioStore.getState();
+  const currentSpeed = store.playbackSpeed;
+  const currentIndex = PLAYBACK_SPEEDS.indexOf(currentSpeed);
+  const nextIndex = (currentIndex + 1) % PLAYBACK_SPEEDS.length;
+  const nextSpeed = PLAYBACK_SPEEDS[nextIndex];
+
+  setPlaybackSpeed(nextSpeed);
+  return nextSpeed;
 }

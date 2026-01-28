@@ -6,7 +6,7 @@ import Slider from '@react-native-community/slider';
 
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAudioStore } from '@/stores/audioStore';
-import { seekTo } from '@/services/audioPlayer';
+import { seekTo, cyclePlaybackSpeed } from '@/services/audioPlayer';
 import PlayerControls from '@/components/PlayerControls';
 import { formatTrackName, formatDuration, getFolderDisplayName } from '@/utils/formatters';
 
@@ -16,7 +16,7 @@ export default function PlayerScreen() {
   const router = useRouter();
   const theme = useAppTheme();
   const insets = useSafeAreaInsets();
-  const { currentTrack, position, duration, queue, currentIndex } = useAudioStore();
+  const { currentTrack, position, duration, queue, currentIndex, playbackSpeed } = useAudioStore();
 
   if (!currentTrack) {
     return (
@@ -40,6 +40,14 @@ export default function PlayerScreen() {
     await seekTo(value);
   };
 
+  const handleSpeedChange = () => {
+    cyclePlaybackSpeed();
+  };
+
+  const formatSpeed = (speed: number) => {
+    return speed === 1 ? '1x' : `${speed}x`;
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: theme.background }]}>
       {/* Header */}
@@ -55,7 +63,11 @@ export default function PlayerScreen() {
             {getFolderDisplayName(currentTrack.folderName)}
           </Text>
         </View>
-        <View style={styles.headerRight} />
+        <TouchableOpacity onPress={handleSpeedChange} style={styles.speedButton}>
+          <Text style={[styles.speedText, { color: theme.primary }]}>
+            {formatSpeed(playbackSpeed)}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Artwork */}
@@ -145,8 +157,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginTop: 2,
   },
-  headerRight: {
+  speedButton: {
     width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  speedText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   artworkContainer: {
     alignItems: 'center',

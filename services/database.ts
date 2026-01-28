@@ -29,6 +29,16 @@ export interface Track {
   lastPlayedDate: number | null;
   downloadDate: number | null;
   isCompleted: boolean;
+  folderPath: string | null;
+  folderName: string | null;
+}
+
+export interface GroupedDownloads {
+  folderPath: string | null;
+  folderName: string | null;
+  tracks: Track[];
+  totalSize: number;
+  trackCount: number;
 }
 
 export interface Favorite {
@@ -83,7 +93,30 @@ export async function initDatabase(): Promise<SQLite.SQLiteDatabase> {
   // Create tables if they don't exist (for fresh installs without seed)
   await createTables(db);
 
+  // Run migrations for existing databases
+  await runMigrations(db);
+
   return db;
+}
+
+/**
+ * Run database migrations for existing databases
+ */
+async function runMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
+  // Check if folder_path column exists in tracks table
+  const tableInfo = await database.getAllAsync<{ name: string }>(
+    `PRAGMA table_info(tracks)`
+  );
+
+  const columnNames = tableInfo.map(col => col.name);
+
+  if (!columnNames.includes('folder_path')) {
+    await database.execAsync(`ALTER TABLE tracks ADD COLUMN folder_path TEXT`);
+  }
+
+  if (!columnNames.includes('folder_name')) {
+    await database.execAsync(`ALTER TABLE tracks ADD COLUMN folder_name TEXT`);
+  }
 }
 
 /**
@@ -112,7 +145,9 @@ async function createTables(database: SQLite.SQLiteDatabase): Promise<void> {
       local_file_path TEXT,
       last_played_date INTEGER,
       download_date INTEGER,
-      is_completed INTEGER DEFAULT 0
+      is_completed INTEGER DEFAULT 0,
+      folder_path TEXT,
+      folder_name TEXT
     );
 
     CREATE TABLE IF NOT EXISTS favorites (
@@ -306,6 +341,8 @@ export async function getTrack(trackUrl: string): Promise<Track | null> {
     last_played_date: number | null;
     download_date: number | null;
     is_completed: number;
+    folder_path: string | null;
+    folder_name: string | null;
   }>(`SELECT * FROM tracks WHERE track_url = ?`, [trackUrl]);
 
   if (!row) return null;
@@ -322,6 +359,8 @@ export async function getTrack(trackUrl: string): Promise<Track | null> {
     lastPlayedDate: row.last_played_date,
     downloadDate: row.download_date,
     isCompleted: row.is_completed === 1,
+    folderPath: row.folder_path,
+    folderName: row.folder_name,
   };
 }
 
@@ -332,8 +371,8 @@ export async function upsertTrack(track: Partial<Track> & { trackUrl: string; tr
   const database = getDatabase();
 
   await database.runAsync(
-    `INSERT INTO tracks (track_url, track_name, track_duration, track_size_bytes, current_playback_time, is_downloaded, local_file_path, last_played_date, download_date, is_completed)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO tracks (track_url, track_name, track_duration, track_size_bytes, current_playback_time, is_downloaded, local_file_path, last_played_date, download_date, is_completed, folder_path, folder_name)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(track_url) DO UPDATE SET
        track_name = excluded.track_name,
        track_duration = COALESCE(excluded.track_duration, track_duration),
@@ -343,7 +382,9 @@ export async function upsertTrack(track: Partial<Track> & { trackUrl: string; tr
        local_file_path = COALESCE(excluded.local_file_path, local_file_path),
        last_played_date = COALESCE(excluded.last_played_date, last_played_date),
        download_date = COALESCE(excluded.download_date, download_date),
-       is_completed = COALESCE(excluded.is_completed, is_completed)`,
+       is_completed = COALESCE(excluded.is_completed, is_completed),
+       folder_path = COALESCE(excluded.folder_path, folder_path),
+       folder_name = COALESCE(excluded.folder_name, folder_name)`,
     [
       track.trackUrl,
       track.trackName,
@@ -355,6 +396,8 @@ export async function upsertTrack(track: Partial<Track> & { trackUrl: string; tr
       track.lastPlayedDate ?? null,
       track.downloadDate ?? null,
       track.isCompleted ? 1 : 0,
+      track.folderPath ?? null,
+      track.folderName ?? null,
     ]
   );
 }
@@ -404,6 +447,8 @@ export async function getDownloadedTracks(limit: number = 500, offset: number = 
     last_played_date: number | null;
     download_date: number | null;
     is_completed: number;
+    folder_path: string | null;
+    folder_name: string | null;
   }>(`SELECT * FROM tracks WHERE is_downloaded = 1 ORDER BY download_date DESC LIMIT ? OFFSET ?`, [limit, offset]);
 
   return rows.map((row) => ({
@@ -418,6 +463,8 @@ export async function getDownloadedTracks(limit: number = 500, offset: number = 
     lastPlayedDate: row.last_played_date,
     downloadDate: row.download_date,
     isCompleted: row.is_completed === 1,
+    folderPath: row.folder_path,
+    folderName: row.folder_name,
   }));
 }
 
@@ -458,6 +505,49 @@ export async function deleteDownloadedTrack(trackUrl: string): Promise<void> {
     `UPDATE tracks SET is_downloaded = 0, local_file_path = NULL WHERE track_url = ?`,
     [trackUrl]
   );
+}
+
+/**
+ * Get downloaded tracks grouped by folder
+ * Returns folders sorted alphabetically, tracks within each folder sorted by download date (newest first)
+ */
+export async function getDownloadedTracksGrouped(): Promise<GroupedDownloads[]> {
+  const tracks = await getDownloadedTracks();
+
+  // Group tracks by folder path
+  const groupMap = new Map<string | null, Track[]>();
+
+  for (const track of tracks) {
+    const key = track.folderPath;
+    if (!groupMap.has(key)) {
+      groupMap.set(key, []);
+    }
+    groupMap.get(key)!.push(track);
+  }
+
+  // Convert to array and sort
+  const groups: GroupedDownloads[] = [];
+
+  for (const [folderPath, folderTracks] of groupMap) {
+    // Tracks are already sorted by download date from getDownloadedTracks
+    groups.push({
+      folderPath,
+      folderName: folderTracks[0]?.folderName ?? null,
+      tracks: folderTracks,
+      totalSize: folderTracks.reduce((sum, t) => sum + (t.trackSizeBytes || 0), 0),
+      trackCount: folderTracks.length,
+    });
+  }
+
+  // Sort groups: folders with names first (alphabetically), then ungrouped (null) last
+  groups.sort((a, b) => {
+    if (a.folderName === null && b.folderName === null) return 0;
+    if (a.folderName === null) return 1;
+    if (b.folderName === null) return -1;
+    return a.folderName.localeCompare(b.folderName);
+  });
+
+  return groups;
 }
 
 // ============ Favorites ============

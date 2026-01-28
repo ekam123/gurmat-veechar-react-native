@@ -21,6 +21,7 @@ interface AudioState {
   position: number;
   buffered: number;
   error: string | null;
+  playbackSpeed: number;
 
   // Queue
   queue: QueueItem[];
@@ -33,6 +34,7 @@ interface AudioState {
   setPosition: (position: number) => void;
   setBuffered: (buffered: number) => void;
   setError: (error: string | null) => void;
+  setPlaybackSpeed: (speed: number) => void;
   setQueue: (queue: QueueItem[], startIndex?: number) => void;
   nextTrack: () => QueueItem | null;
   previousTrack: () => QueueItem | null;
@@ -46,6 +48,7 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   position: 0,
   buffered: 0,
   error: null,
+  playbackSpeed: 1,
   queue: [],
   currentIndex: -1,
 
@@ -60,6 +63,8 @@ export const useAudioStore = create<AudioState>((set, get) => ({
   setBuffered: (buffered) => set({ buffered }),
 
   setError: (error) => set({ error, playbackStatus: error ? 'error' : get().playbackStatus }),
+
+  setPlaybackSpeed: (speed) => set({ playbackSpeed: speed }),
 
   setQueue: (queue, startIndex = 0) => {
     // Limit queue size to prevent memory issues
