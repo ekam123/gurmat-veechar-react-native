@@ -7,12 +7,11 @@ import { useAppTheme } from '@/hooks/useAppTheme';
 
 interface CategoryCardProps {
   title: string;
-  subtitle: string;
   path: string;
   icon: string;
 }
 
-export default function CategoryCard({ title, subtitle, path, icon }: CategoryCardProps) {
+export default function CategoryCard({ title, path, icon }: CategoryCardProps) {
   const router = useRouter();
   const theme = useAppTheme();
 
@@ -31,7 +30,6 @@ export default function CategoryCard({ title, subtitle, path, icon }: CategoryCa
       </View>
       <View style={styles.textContainer}>
         <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-        <Text style={[styles.subtitle, { color: theme.textSecondary }]}>{subtitle}</Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color={theme.textSecondary} />
     </TouchableOpacity>
@@ -62,9 +60,5 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 17,
     fontWeight: '600',
-  },
-  subtitle: {
-    fontSize: 13,
-    marginTop: 2,
   },
 });

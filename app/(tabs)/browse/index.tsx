@@ -166,7 +166,6 @@ export default function BrowseScreen() {
               <CategoryCard
                 key={category.id}
                 title={category.title}
-                subtitle={category.subtitle}
                 path={category.path}
                 icon={category.icon}
               />
