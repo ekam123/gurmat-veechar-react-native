@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -10,9 +10,12 @@ import {
   Alert,
   Platform,
   ViewToken,
+  TextInput,
+  Keyboard,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAudioStore, buildQueueFromFolder } from '@/stores/audioStore';
@@ -37,12 +40,19 @@ export default function FolderScreen() {
   const { path } = useLocalSearchParams<{ path: string }>();
   const router = useRouter();
   const theme = useAppTheme();
+  const insets = useSafeAreaInsets();
 
   const [items, setItems] = useState<CachedFolder[]>([]);
   const [trackInfoMap, setTrackInfoMap] = useState<Map<string, Track>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isFavorited, setIsFavorited] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isContentScrollable, setIsContentScrollable] = useState(false);
+  const searchInputRef = useRef<TextInput>(null);
+  const listHeightRef = useRef(0);
+  const contentHeightRef = useRef(0);
 
   // Track which items are currently visible for lazy loading
   const visibleItemsRef = useRef<Set<string>>(new Set());
@@ -50,6 +60,38 @@ export default function FolderScreen() {
 
   const decodedPath = decodeURIComponent(path || '');
   const folderName = getFolderDisplayName(decodedPath);
+
+  // Filter items based on search query
+  const filteredItems = useMemo(() => {
+    if (!searchQuery.trim()) return items;
+    const query = searchQuery.toLowerCase();
+    return items.filter((item) => item.itemName.toLowerCase().includes(query));
+  }, [items, searchQuery]);
+
+  const handleSearchToggle = useCallback(() => {
+    if (isSearching) {
+      setIsSearching(false);
+      setSearchQuery('');
+      Keyboard.dismiss();
+    } else {
+      setIsSearching(true);
+      setTimeout(() => searchInputRef.current?.focus(), 100);
+    }
+  }, [isSearching]);
+
+  const checkIfScrollable = useCallback(() => {
+    setIsContentScrollable(contentHeightRef.current > listHeightRef.current);
+  }, []);
+
+  const handleListLayout = useCallback((e: { nativeEvent: { layout: { height: number } } }) => {
+    listHeightRef.current = e.nativeEvent.layout.height;
+    checkIfScrollable();
+  }, [checkIfScrollable]);
+
+  const handleContentSizeChange = useCallback((_width: number, height: number) => {
+    contentHeightRef.current = height;
+    checkIfScrollable();
+  }, [checkIfScrollable]);
 
   // Load track info for given items
   const loadTrackInfoForItems = useCallback(async (itemPaths: string[]) => {
@@ -350,27 +392,36 @@ export default function FolderScreen() {
   };
 
   const renderHeader = () => {
-    const audioCount = items.filter((item) => item.itemType === 'audio').length;
-    const folderCount = items.filter((item) => item.itemType === 'folder').length;
+    const displayItems = isSearching ? filteredItems : items;
+    const audioCount = displayItems.filter((item) => item.itemType === 'audio').length;
+    const folderCount = displayItems.filter((item) => item.itemType === 'folder').length;
 
     if (items.length === 0) return null;
 
     return (
       <View style={[styles.header, { borderBottomColor: theme.border }]}>
         <View style={styles.headerInfo}>
-          {folderCount > 0 && (
+          {isSearching ? (
             <Text style={[styles.headerCount, { color: theme.textSecondary }]}>
-              {folderCount} folder{folderCount !== 1 ? 's' : ''}
+              {filteredItems.length} result{filteredItems.length !== 1 ? 's' : ''}
             </Text>
-          )}
-          {audioCount > 0 && (
-            <Text style={[styles.headerCount, { color: theme.textSecondary }]}>
-              {folderCount > 0 ? ' · ' : ''}{audioCount} track{audioCount !== 1 ? 's' : ''}
-            </Text>
+          ) : (
+            <>
+              {folderCount > 0 && (
+                <Text style={[styles.headerCount, { color: theme.textSecondary }]}>
+                  {folderCount} folder{folderCount !== 1 ? 's' : ''}
+                </Text>
+              )}
+              {audioCount > 0 && (
+                <Text style={[styles.headerCount, { color: theme.textSecondary }]}>
+                  {folderCount > 0 ? ' · ' : ''}{audioCount} track{audioCount !== 1 ? 's' : ''}
+                </Text>
+              )}
+            </>
           )}
         </View>
 
-        {audioCount > 0 && (
+        {audioCount > 0 && !isSearching && (
           <TouchableOpacity
             style={[styles.playAllButton, { backgroundColor: theme.primary }]}
             onPress={handlePlayAll}
@@ -385,10 +436,18 @@ export default function FolderScreen() {
 
   const renderEmpty = () => (
     <View style={styles.emptyContainer}>
-      <Ionicons name="folder-open-outline" size={64} color={theme.textSecondary} />
-      <Text style={[styles.emptyTitle, { color: theme.text }]}>Empty Folder</Text>
+      <Ionicons
+        name={isSearching ? 'search-outline' : 'folder-open-outline'}
+        size={64}
+        color={theme.textSecondary}
+      />
+      <Text style={[styles.emptyTitle, { color: theme.text }]}>
+        {isSearching ? 'No Results' : 'Empty Folder'}
+      </Text>
       <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-        No content available in this folder
+        {isSearching
+          ? `No items matching "${searchQuery}"`
+          : 'No content available in this folder'}
       </Text>
     </View>
   );
@@ -410,28 +469,57 @@ export default function FolderScreen() {
         }}
       />
 
+      {/* Search Bar */}
+      {isSearching && (
+        <View style={[styles.searchBarContainer, { backgroundColor: theme.surface, borderBottomColor: theme.border }]}>
+          <View style={[styles.searchBar, { backgroundColor: theme.background, borderColor: theme.border }]}>
+            <Ionicons name="search" size={18} color={theme.textSecondary} />
+            <TextInput
+              ref={searchInputRef}
+              style={[styles.searchInput, { color: theme.text }]}
+              placeholder="Search in this folder..."
+              placeholderTextColor={theme.textSecondary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoCorrect={false}
+              returnKeyType="search"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={18} color={theme.textSecondary} />
+              </TouchableOpacity>
+            )}
+          </View>
+          <TouchableOpacity onPress={handleSearchToggle} style={styles.cancelButton}>
+            <Text style={[styles.cancelButtonText, { color: theme.primary }]}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {isLoading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={theme.primary} />
         </View>
       ) : (
         <FlatList
-          data={items}
+          data={isSearching ? filteredItems : items}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={renderEmpty}
           contentContainerStyle={[
             styles.listContent,
-            items.length === 0 && styles.emptyList,
+            (isSearching ? filteredItems : items).length === 0 && styles.emptyList,
           ]}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl
-              refreshing={isRefreshing}
-              onRefresh={handleRefresh}
-              tintColor={theme.primary}
-            />
+            !isSearching ? (
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor={theme.primary}
+              />
+            ) : undefined
           }
           // Performance optimizations
           removeClippedSubviews={Platform.OS === 'android'}
@@ -442,7 +530,24 @@ export default function FolderScreen() {
           // Lazy loading for track info
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
+          // Track scrollable state
+          onLayout={handleListLayout}
+          onContentSizeChange={handleContentSizeChange}
         />
+      )}
+
+      {/* Floating Search Button - only show when content is scrollable */}
+      {!isSearching && !isLoading && items.length > 0 && isContentScrollable && (
+        <TouchableOpacity
+          style={[
+            styles.fab,
+            { backgroundColor: theme.primary, bottom: 65 + insets.bottom },
+          ]}
+          onPress={handleSearchToggle}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="search" size={24} color="#fff" />
+        </TouchableOpacity>
       )}
     </View>
   );
@@ -509,5 +614,48 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     marginTop: 8,
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  cancelButton: {
+    marginLeft: 12,
+    paddingVertical: 8,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  fab: {
+    position: 'absolute',
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 5,
   },
 });
