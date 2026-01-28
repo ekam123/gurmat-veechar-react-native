@@ -11,7 +11,7 @@ import {
   Platform,
   ViewToken,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { useLocalSearchParams, useRouter, Stack, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useAppTheme } from '@/hooks/useAppTheme';
@@ -24,6 +24,7 @@ import {
   addFavorite,
   removeFavorite,
   isFavorite,
+  markTrackCompleted,
 } from '@/services/database';
 import { syncFolderIfNeeded, forceSyncFolder } from '@/services/folderSync';
 import { playTrack } from '@/services/audioPlayer';
@@ -50,11 +51,17 @@ export default function FolderScreen() {
   const decodedPath = decodeURIComponent(path || '');
   const folderName = getFolderDisplayName(decodedPath);
 
-  // Lazy load track info only for visible items
+  // Load track info for given items
   const loadTrackInfoForItems = useCallback(async (itemPaths: string[]) => {
-    const pathsToLoad = itemPaths.filter(
-      (path) => !trackInfoMap.has(path) && !loadingItemsRef.current.has(path)
-    );
+    // Use functional update to get current state without dependency
+    let pathsToLoad: string[] = [];
+
+    setTrackInfoMap((prev) => {
+      pathsToLoad = itemPaths.filter(
+        (path) => !prev.has(path) && !loadingItemsRef.current.has(path)
+      );
+      return prev; // Don't update yet
+    });
 
     if (pathsToLoad.length === 0) return;
 
@@ -83,7 +90,7 @@ export default function FolderScreen() {
         return newMap;
       });
     }
-  }, [trackInfoMap]);
+  }, []);
 
   // Handle viewable items change for lazy loading
   const onViewableItemsChanged = useCallback(
@@ -118,6 +125,29 @@ export default function FolderScreen() {
       setTrackInfoMap(new Map());
       loadingItemsRef.current.clear();
 
+      // Load track info for initial visible items (first 15 audio items)
+      const initialAudioPaths = data
+        .filter((item) => item.itemType === 'audio')
+        .slice(0, 15)
+        .map((item) => item.itemPath);
+
+      if (initialAudioPaths.length > 0) {
+        // Load track info immediately for initial items
+        const trackInfoPromises = initialAudioPaths.map(async (itemPath) => {
+          const track = await getTrack(itemPath);
+          return { url: itemPath, track };
+        });
+
+        const trackInfoResults = await Promise.all(trackInfoPromises);
+        const newMap = new Map<string, Track>();
+        trackInfoResults.forEach(({ url, track }) => {
+          if (track) {
+            newMap.set(url, track);
+          }
+        });
+        setTrackInfoMap(newMap);
+      }
+
       // Check favorite status
       const favorited = await isFavorite(decodedPath);
       setIsFavorited(favorited);
@@ -139,6 +169,46 @@ export default function FolderScreen() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Refresh track info when screen regains focus (e.g., after clearing downloads)
+  const trackInfoMapRef = useRef(trackInfoMap);
+  trackInfoMapRef.current = trackInfoMap;
+
+  useFocusEffect(
+    useCallback(() => {
+      // Only refresh if we already have items loaded (not initial load)
+      if (items.length === 0) return;
+
+      const refreshTrackInfo = async () => {
+        // Get all track URLs currently in the map
+        const trackUrls = Array.from(trackInfoMapRef.current.keys());
+        if (trackUrls.length === 0) return;
+
+        // Reload track info from database
+        const trackInfoPromises = trackUrls.map(async (itemPath) => {
+          const track = await getTrack(itemPath);
+          return { url: itemPath, track };
+        });
+
+        const trackInfoResults = await Promise.all(trackInfoPromises);
+
+        setTrackInfoMap((prev) => {
+          const newMap = new Map(prev);
+          trackInfoResults.forEach(({ url, track }) => {
+            if (track) {
+              newMap.set(url, track);
+            } else {
+              // Track was deleted from database, remove from map
+              newMap.delete(url);
+            }
+          });
+          return newMap;
+        });
+      };
+
+      refreshTrackInfo();
+    }, [items.length])
+  );
 
   const handleRefresh = useCallback(() => {
     setIsRefreshing(true);
@@ -229,6 +299,38 @@ export default function FolderScreen() {
     });
   };
 
+  const handleMarkComplete = async (item: CachedFolder, completed: boolean) => {
+    try {
+      await markTrackCompleted(item.itemPath, completed);
+      // Update local state to reflect the change
+      setTrackInfoMap((prev) => {
+        const newMap = new Map(prev);
+        const existing = newMap.get(item.itemPath);
+        if (existing) {
+          newMap.set(item.itemPath, { ...existing, isCompleted: completed });
+        } else {
+          // Create a minimal track entry if it doesn't exist
+          newMap.set(item.itemPath, {
+            id: 0,
+            trackUrl: item.itemPath,
+            trackName: item.itemName,
+            trackDuration: 0,
+            trackSizeBytes: 0,
+            currentPlaybackTime: 0,
+            isDownloaded: false,
+            localFilePath: null,
+            lastPlayedDate: null,
+            downloadDate: null,
+            isCompleted: completed,
+          });
+        }
+        return newMap;
+      });
+    } catch (error) {
+      console.error('Error marking track complete:', error);
+    }
+  };
+
   const renderItem = ({ item, index }: { item: CachedFolder; index: number }) => {
     if (item.itemType === 'folder') {
       return <FolderItem item={item} onPress={() => handleFolderPress(item)} />;
@@ -240,6 +342,7 @@ export default function FolderScreen() {
         trackInfo={trackInfoMap.get(item.itemPath)}
         onPress={() => handleAudioPress(item, index)}
         onDownload={() => handleDownload(item)}
+        onMarkComplete={(completed) => handleMarkComplete(item, completed)}
       />
     );
   };

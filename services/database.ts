@@ -372,6 +372,21 @@ export async function updateTrackPosition(trackUrl: string, position: number, is
 }
 
 /**
+ * Mark a track as completed or not completed
+ */
+export async function markTrackCompleted(trackUrl: string, isCompleted: boolean): Promise<void> {
+  const database = getDatabase();
+
+  // First ensure the track exists
+  await upsertTrack({ trackUrl, trackName: trackUrl.split('/').pop() || 'Unknown' });
+
+  await database.runAsync(
+    `UPDATE tracks SET is_completed = ?, current_playback_time = CASE WHEN ? = 1 THEN 0 ELSE current_playback_time END WHERE track_url = ?`,
+    [isCompleted ? 1 : 0, isCompleted ? 1 : 0, trackUrl]
+  );
+}
+
+/**
  * Get all downloaded tracks with optional pagination
  */
 export async function getDownloadedTracks(limit: number = 500, offset: number = 0): Promise<Track[]> {
