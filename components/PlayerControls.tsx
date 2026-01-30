@@ -1,5 +1,5 @@
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { View, TouchableOpacity, StyleSheet, Text } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAudioStore } from '@/stores/audioStore';
@@ -34,13 +34,16 @@ export default function PlayerControls({ size = 'large' }: PlayerControlsProps) 
 
   return (
     <View style={styles.container}>
-      {/* Skip backward 15s */}
+      {/* Skip backward 20s */}
       {isLarge && (
         <TouchableOpacity
           style={[styles.skipButton, { width: skipButtonSize, height: skipButtonSize }]}
-          onPress={() => skipBackward(15)}
+          onPress={() => skipBackward(20)}
         >
-          <Ionicons name="play-back" size={skipIconSize} color={theme.textSecondary} />
+          <View style={styles.skipIconContainer}>
+            <MaterialCommunityIcons name="restore" size={44} color={theme.text} />
+            <Text style={[styles.skipText, styles.skipTextBackward, { color: theme.text }]}>20</Text>
+          </View>
         </TouchableOpacity>
       )}
 
@@ -94,13 +97,16 @@ export default function PlayerControls({ size = 'large' }: PlayerControlsProps) 
         />
       </TouchableOpacity>
 
-      {/* Skip forward 15s */}
+      {/* Skip forward 20s */}
       {isLarge && (
         <TouchableOpacity
           style={[styles.skipButton, { width: skipButtonSize, height: skipButtonSize }]}
-          onPress={() => skipForward(15)}
+          onPress={() => skipForward(20)}
         >
-          <Ionicons name="play-forward" size={skipIconSize} color={theme.textSecondary} />
+          <View style={styles.skipIconContainer}>
+            <MaterialCommunityIcons name="reload" size={44} color={theme.text} />
+            <Text style={[styles.skipText, styles.skipTextForward, { color: theme.text }]}>20</Text>
+          </View>
         </TouchableOpacity>
       )}
     </View>
@@ -130,6 +136,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginHorizontal: 4,
+  },
+  skipIconContainer: {
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  skipText: {
+    position: 'absolute',
+    fontSize: 9,
+    fontWeight: '700',
+    width: 44,
+    height: 44,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    lineHeight: 44,
+  },
+  skipTextBackward: {
+    paddingLeft: 2,
+  },
+  skipTextForward: {
+    paddingRight: 2,
   },
   disabledButton: {
     opacity: 0.5,
