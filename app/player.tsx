@@ -8,9 +8,34 @@ import { useAppTheme } from '@/hooks/useAppTheme';
 import { useAudioStore } from '@/stores/audioStore';
 import { seekTo, cyclePlaybackSpeed } from '@/services/audioPlayer';
 import PlayerControls from '@/components/PlayerControls';
-import { formatTrackName, formatDuration, getFolderDisplayName } from '@/utils/formatters';
+import { formatTrackName, formatDuration } from '@/utils/formatters';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+/**
+ * Extract just the title part from track name
+ * For format like "Person - 045 - Title", returns just "Title"
+ */
+function getTrackTitle(name: string): string {
+  if (!name) return '';
+
+  // Remove .mp3 extension
+  const withoutExt = name.replace(/\.mp3$/i, '');
+
+  // Split by " - " to find parts
+  const parts = withoutExt.split(/\s*-\s*/);
+
+  // Find the index of a purely numeric part (track number)
+  const numberIndex = parts.findIndex((part) => /^\d+$/.test(part));
+
+  // If we found a number, take everything after it as the title
+  if (numberIndex !== -1 && numberIndex < parts.length - 1) {
+    return parts.slice(numberIndex + 1).join(' - ').trim();
+  }
+
+  // Fallback to formatted track name
+  return formatTrackName(name);
+}
 
 export default function PlayerScreen() {
   const router = useRouter();
@@ -60,7 +85,7 @@ export default function PlayerScreen() {
             Now Playing
           </Text>
           <Text style={[styles.headerSubtitle, { color: theme.text }]} numberOfLines={1}>
-            {getFolderDisplayName(currentTrack.folderName)}
+            {getTrackTitle(currentTrack.trackName)}
           </Text>
         </View>
         <View style={styles.headerRight} />
@@ -79,7 +104,7 @@ export default function PlayerScreen() {
           {formatTrackName(currentTrack.trackName)}
         </Text>
         <Text style={[styles.folderName, { color: theme.textSecondary }]} numberOfLines={1}>
-          {currentTrack.folderName}
+          {getTrackTitle(currentTrack.trackName)}
         </Text>
       </View>
 
@@ -120,9 +145,18 @@ export default function PlayerScreen() {
       {/* Queue Info */}
       <View style={[styles.queueInfo, { paddingBottom: insets.bottom + 20 }]}>
         {queue.length > 1 && (
-          <Text style={[styles.queueText, { color: theme.textSecondary }]}>
-            Track {currentIndex + 1} of {queue.length}
-          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              if (currentTrack?.folderPath) {
+                router.dismiss();
+                router.push(`/browse/folder/${encodeURIComponent(currentTrack.folderPath)}` as any);
+              }
+            }}
+          >
+            <Text style={[styles.queueText, { color: theme.primary }]}>
+              Track {currentIndex + 1} of {queue.length}
+            </Text>
+          </TouchableOpacity>
         )}
       </View>
     </View>
